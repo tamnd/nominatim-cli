@@ -127,10 +127,10 @@ func (c *Client) Lookup(ctx context.Context, osmIDs []string) ([]Location, error
 }
 
 // Reverse performs reverse geocoding: converts a latitude/longitude pair into a
-// structured address.
-func (c *Client) Reverse(ctx context.Context, lat, lon float64) (*Address, error) {
-	u := fmt.Sprintf("%s/reverse?lat=%.7f&lon=%.7f&format=json&addressdetails=1",
-		c.cfg.BaseURL, lat, lon)
+// structured address. lat and lon are decimal degree strings (e.g. "48.8566").
+func (c *Client) Reverse(ctx context.Context, lat, lon string) (*Address, error) {
+	u := fmt.Sprintf("%s/reverse?lat=%s&lon=%s&format=json&addressdetails=1",
+		c.cfg.BaseURL, neturl.QueryEscape(lat), neturl.QueryEscape(lon))
 	body, err := c.get(ctx, u)
 	if err != nil {
 		return nil, err

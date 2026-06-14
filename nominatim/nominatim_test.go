@@ -3,7 +3,6 @@ package nominatim_test
 import (
 	"context"
 	"fmt"
-	"math"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -16,6 +15,7 @@ const fakeSearchJSON = `[
     "place_id": 162639773,
     "osm_type": "relation",
     "osm_id": 7444,
+    "name": "Paris",
     "display_name": "Paris, Île-de-France, France métropolitaine, France",
     "lat": "48.8534951",
     "lon": "2.3483915",
@@ -27,6 +27,7 @@ const fakeSearchJSON = `[
     "place_id": 298950971,
     "osm_type": "relation",
     "osm_id": 71525,
+    "name": "Paris",
     "display_name": "Paris, Texas, United States",
     "lat": "33.6617962",
     "lon": "-95.5554541",
@@ -58,10 +59,6 @@ func newTestClient(ts *httptest.Server) *nominatim.Client {
 	cfg.Rate = 0
 	cfg.Retries = 3
 	return nominatim.NewClient(cfg)
-}
-
-func approxEqual(a, b, tol float64) bool {
-	return math.Abs(a-b) < tol
 }
 
 func TestSearchSendsUserAgent(t *testing.T) {
@@ -102,14 +99,17 @@ func TestSearchParsesItems(t *testing.T) {
 	if got.Rank != 1 {
 		t.Errorf("items[0].Rank = %d, want 1", got.Rank)
 	}
+	if got.Name != "Paris" {
+		t.Errorf("items[0].Name = %q, want Paris", got.Name)
+	}
 	if got.DisplayName != "Paris, Île-de-France, France métropolitaine, France" {
 		t.Errorf("items[0].DisplayName = %q", got.DisplayName)
 	}
-	if !approxEqual(got.Lat, 48.8534951, 0.001) {
-		t.Errorf("items[0].Lat = %f, want ~48.8534951", got.Lat)
+	if got.Lat != "48.8534951" {
+		t.Errorf("items[0].Lat = %q, want 48.8534951", got.Lat)
 	}
-	if !approxEqual(got.Lon, 2.3483915, 0.001) {
-		t.Errorf("items[0].Lon = %f, want ~2.3483915", got.Lon)
+	if got.Lon != "2.3483915" {
+		t.Errorf("items[0].Lon = %q, want 2.3483915", got.Lon)
 	}
 	wantURL := "https://www.openstreetmap.org/relation/7444"
 	if got.URL != wantURL {
@@ -174,6 +174,7 @@ const fakeLookupJSON = `[
     "place_id": 162639773,
     "osm_type": "relation",
     "osm_id": 7444,
+    "name": "Paris",
     "display_name": "Paris, Île-de-France, France métropolitaine, France",
     "lat": "48.8534951",
     "lon": "2.3483915",
@@ -235,7 +236,7 @@ func TestLookupParsesItems(t *testing.T) {
 		t.Errorf("URL = %q, want %q", got.URL, wantURL)
 	}
 	// Check that osmnodes parameter was sent
-	if !contains(gotQuery, "osmnodes") {
+	if !containsStr(gotQuery, "osmnodes") {
 		t.Errorf("query %q does not contain osmnodes", gotQuery)
 	}
 }
@@ -246,10 +247,6 @@ func TestLookupEmptyIDs(t *testing.T) {
 	if err == nil {
 		t.Error("expected error for empty ID list")
 	}
-}
-
-func contains(s, sub string) bool {
-	return len(s) >= len(sub) && (s == sub || len(s) > 0 && containsStr(s, sub))
 }
 
 func containsStr(s, sub string) bool {
@@ -268,7 +265,7 @@ func TestReverseParses(t *testing.T) {
 	defer ts.Close()
 
 	c := newTestClient(ts)
-	addr, err := c.Reverse(context.Background(), 48.8566, 2.3522)
+	addr, err := c.Reverse(context.Background(), "48.8566", "2.3522")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -281,20 +278,38 @@ func TestReverseParses(t *testing.T) {
 	if addr.Country != "France" {
 		t.Errorf("Country = %q, want France", addr.Country)
 	}
-	if addr.CountryCode != "fr" {
-		t.Errorf("CountryCode = %q, want fr", addr.CountryCode)
-	}
 	if addr.Road != "Champ de Mars" {
 		t.Errorf("Road = %q, want Champ de Mars", addr.Road)
 	}
-	if addr.Postcode != "75007" {
-		t.Errorf("Postcode = %q, want 75007", addr.Postcode)
+	if addr.PostCode != "75007" {
+		t.Errorf("PostCode = %q, want 75007", addr.PostCode)
 	}
-	if !approxEqual(addr.Lat, 48.8566101, 0.001) {
-		t.Errorf("Lat = %f, want ~48.8566101", addr.Lat)
+	if addr.Lat != "48.8566101" {
+		t.Errorf("Lat = %q, want 48.8566101", addr.Lat)
 	}
-	if !approxEqual(addr.Lon, 2.3514992, 0.001) {
-		t.Errorf("Lon = %f, want ~2.3514992", addr.Lon)
+	if addr.Lon != "2.3514992" {
+		t.Errorf("Lon = %q, want 2.3514992", addr.Lon)
+	}
+}
+
+func TestReverseSendsLatLon(t *testing.T) {
+	var gotQuery string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.RawQuery
+		_, _ = fmt.Fprint(w, fakeReverseJSON)
+	}))
+	defer ts.Close()
+
+	c := newTestClient(ts)
+	_, err := c.Reverse(context.Background(), "40.7128", "-74.0060")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !containsStr(gotQuery, "lat=40.7128") {
+		t.Errorf("query %q does not contain lat=40.7128", gotQuery)
+	}
+	if !containsStr(gotQuery, "lon=-74.0060") {
+		t.Errorf("query %q does not contain lon=-74.0060", gotQuery)
 	}
 }
 
@@ -322,11 +337,6 @@ const fakeStatusJSON = `{
   "data_updated": "2024-01-15T01:00:01+00:00",
   "software_version": "4.4.0-0",
   "database_version": "4.4.0-0"
-}`
-
-const fakeStatusErrorJSON = `{
-  "status": 2,
-  "message": "Database connection failed"
 }`
 
 func TestStatusParsesOK(t *testing.T) {

@@ -2,16 +2,16 @@ package nominatim
 
 import (
 	"fmt"
-	"strconv"
 )
 
 // Location is one result from the Nominatim search (forward geocoding) endpoint.
 type Location struct {
 	Rank        int     `json:"rank"`
 	PlaceID     int64   `json:"place_id"`
+	Name        string  `kit:"id" json:"name"`
 	DisplayName string  `json:"display_name"`
-	Lat         float64 `json:"lat"`
-	Lon         float64 `json:"lon"`
+	Lat         string  `json:"lat"`
+	Lon         string  `json:"lon"`
 	Type        string  `json:"type"`       // e.g. "administrative", "city"
 	Class       string  `json:"class"`      // e.g. "boundary", "place"
 	Importance  float64 `json:"importance"` // 0.0–1.0 relevance score
@@ -22,16 +22,14 @@ type Location struct {
 
 // Address is the result from the Nominatim reverse geocoding endpoint.
 type Address struct {
-	DisplayName string  `json:"display_name"`
-	Lat         float64 `json:"lat"`
-	Lon         float64 `json:"lon"`
-	House       string  `json:"house,omitempty"` // house_number
-	Road        string  `json:"road,omitempty"`
-	City        string  `json:"city,omitempty"` // city || town || village fallback
-	State       string  `json:"state,omitempty"`
-	Country     string  `json:"country,omitempty"`
-	CountryCode string  `json:"country_code,omitempty"`
-	Postcode    string  `json:"postcode,omitempty"`
+	DisplayName string `kit:"id" json:"display_name"`
+	Lat         string `json:"lat"`
+	Lon         string `json:"lon"`
+	Road        string `json:"road,omitempty"`
+	City        string `json:"city,omitempty"` // city || town || village fallback
+	State       string `json:"state,omitempty"`
+	Country     string `json:"country,omitempty"`
+	PostCode    string `json:"postcode,omitempty"`
 }
 
 // Status is the result from the Nominatim /status endpoint.
@@ -51,6 +49,7 @@ type rawLocation struct {
 	PlaceID     int64   `json:"place_id"`
 	OsmType     string  `json:"osm_type"`
 	OsmID       int64   `json:"osm_id"`
+	Name        string  `json:"name"`
 	DisplayName string  `json:"display_name"`
 	Lat         string  `json:"lat"`
 	Lon         string  `json:"lon"`
@@ -60,20 +59,16 @@ type rawLocation struct {
 }
 
 func (r rawLocation) toLocation(rank int) (Location, error) {
-	lat, err := strconv.ParseFloat(r.Lat, 64)
-	if err != nil {
-		return Location{}, fmt.Errorf("parse lat %q: %w", r.Lat, err)
-	}
-	lon, err := strconv.ParseFloat(r.Lon, 64)
-	if err != nil {
-		return Location{}, fmt.Errorf("parse lon %q: %w", r.Lon, err)
+	if r.Lat == "" {
+		return Location{}, fmt.Errorf("missing lat in result")
 	}
 	return Location{
 		Rank:        rank,
 		PlaceID:     r.PlaceID,
+		Name:        r.Name,
 		DisplayName: r.DisplayName,
-		Lat:         lat,
-		Lon:         lon,
+		Lat:         r.Lat,
+		Lon:         r.Lon,
 		Type:        r.Type,
 		Class:       r.Class,
 		Importance:  r.Importance,
@@ -93,14 +88,6 @@ type rawReverse struct {
 }
 
 func (r rawReverse) toAddress() (*Address, error) {
-	lat, err := strconv.ParseFloat(r.Lat, 64)
-	if err != nil {
-		return nil, fmt.Errorf("parse lat %q: %w", r.Lat, err)
-	}
-	lon, err := strconv.ParseFloat(r.Lon, 64)
-	if err != nil {
-		return nil, fmt.Errorf("parse lon %q: %w", r.Lon, err)
-	}
 	city := r.Address.City
 	if city == "" {
 		city = r.Address.Town
@@ -113,15 +100,13 @@ func (r rawReverse) toAddress() (*Address, error) {
 	}
 	return &Address{
 		DisplayName: r.DisplayName,
-		Lat:         lat,
-		Lon:         lon,
-		House:       r.Address.HouseNumber,
+		Lat:         r.Lat,
+		Lon:         r.Lon,
 		Road:        r.Address.Road,
 		City:        city,
 		State:       r.Address.State,
 		Country:     r.Address.Country,
-		CountryCode: r.Address.CountryCode,
-		Postcode:    r.Address.Postcode,
+		PostCode:    r.Address.Postcode,
 	}, nil
 }
 

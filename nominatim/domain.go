@@ -60,6 +60,10 @@ func (Domain) Register(app *kit.App) {
 		Group:   "read",
 		Single:  true,
 		Summary: "Reverse geocoding: convert coordinates to an address",
+		Args: []kit.Arg{
+			{Name: "lat", Help: "latitude (decimal degrees, e.g. 48.8566)"},
+			{Name: "lon", Help: "longitude (decimal degrees, e.g. 2.3522)"},
+		},
 	}, reverseOp)
 
 	// lookup: fetch OSM objects by prefixed ID (N=node, R=relation, W=way)
@@ -102,13 +106,13 @@ func newClient(_ context.Context, cfg kit.Config) (any, error) {
 type searchInput struct {
 	Query   string  `kit:"arg"          help:"place name or address to geocode"`
 	Limit   int     `kit:"flag,inherit" help:"max results (default 5)"`
-	Country string  `kit:"flag,inherit" help:"ISO 3166-1 alpha-2 country code to restrict results"`
+	Country string  `kit:"flag"         help:"ISO 3166-1 alpha-2 country code to restrict results (e.g. US, FR)"`
 	Client  *Client `kit:"inject"`
 }
 
 type reverseInput struct {
-	Lat    float64 `kit:"flag" help:"latitude"`
-	Lon    float64 `kit:"flag" help:"longitude"`
+	Lat    string  `kit:"arg" help:"latitude (decimal degrees, e.g. 48.8566)"`
+	Lon    string  `kit:"arg" help:"longitude (decimal degrees, e.g. 2.3522)"`
 	Client *Client `kit:"inject"`
 }
 
@@ -143,6 +147,7 @@ func reverseOp(ctx context.Context, in reverseInput, emit func(Address) error) e
 	}
 	return emit(*addr)
 }
+
 
 func lookupOp(ctx context.Context, in lookupInput, emit func(Location) error) error {
 	items, err := in.Client.Lookup(ctx, in.IDs)
