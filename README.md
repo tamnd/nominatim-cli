@@ -1,14 +1,12 @@
 # nominatim
 
-A command line for nominatim.
+Geocoding CLI for [Nominatim](https://nominatim.openstreetmap.org) (OpenStreetMap). No API key required.
 
-`nominatim` is a single pure-Go binary. It reads public nominatim data
-over plain HTTPS, shapes it into clean records, and prints output that pipes
-into the rest of your tools. No API key, nothing to run alongside it.
+`nominatim` converts place names to coordinates (forward geocoding) and coordinates to addresses (reverse geocoding) using the free public Nominatim API. It is a single pure-Go binary that respects the Nominatim usage policy: identifies itself with a proper User-Agent and paces requests to stay within the 1 req/s limit.
 
 The same package is also a [resource-URI driver](#use-it-as-a-resource-uri-driver),
 so a host program like [ant](https://github.com/tamnd/ant) can address
-nominatim as `nominatim://` URIs.
+Nominatim as `nominatim://` URIs.
 
 ## Install
 
@@ -26,30 +24,43 @@ docker run --rm ghcr.io/tamnd/nominatim:latest --help
 ## Usage
 
 ```bash
-nominatim page <path>                      # fetch one page as a record
-nominatim page <path> -o json              # as JSON, ready for jq
-nominatim page <path> --template '{{.Body}}'  # just the readable body text
-nominatim links <path>                     # the pages it links to, one per line
-nominatim --help                           # the whole command tree
+# Forward geocoding: place name -> coordinates
+nominatim search "Paris, France"
+nominatim search "Eiffel Tower" --limit 3
+
+# Reverse geocoding: coordinates -> address
+nominatim reverse --lat 48.8566 --lon 2.3522
+
+# Control output format
+nominatim search "Tokyo" -o json
+nominatim search "London" --fields rank,display_name,lat,lon
+nominatim reverse --lat 35.6762 --lon 139.6503 --template '{{.City}}, {{.Country}}'
 ```
 
 Every command shares one output contract: `-o table|json|jsonl|csv|tsv|url|raw`,
 `--fields` to pick columns, `--template` for a custom line, and `-n` to limit.
-The default adapts to where output goes (a table on a terminal, JSONL in a
-pipe), so the same command reads well by hand and parses cleanly downstream.
 
-This is a fresh scaffold. It ships one example resource type, `page`, wired end
-to end. Model the real nominatim records in `nominatim/` and declare their
-operations in `nominatim/domain.go`; each one becomes a command, an HTTP
-route, and an MCP tool at once.
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `nominatim search <query>` | Forward geocoding: place name or address to coordinates |
+| `nominatim reverse --lat LAT --lon LON` | Reverse geocoding: coordinates to address |
+
+## Usage policy
+
+Nominatim is a free service run by the OpenStreetMap Foundation. Using it responsibly:
+
+- Every request identifies itself as `nominatim-cli` with a contact URL.
+- Requests are paced at 1100 ms minimum gap (10% headroom above the 1 req/s hard limit).
+- Bulk geocoding is not supported. For batch workloads, consider self-hosting Nominatim.
 
 ## Serve it
 
-The same operations are available over HTTP and as an MCP tool set for agents,
-with no extra code:
+The same operations are available over HTTP and as an MCP tool set for agents:
 
 ```bash
-nominatim serve --addr :7777    # GET /v1/page/<path>  returns NDJSON
+nominatim serve --addr :7777    # GET /v1/search?query=Paris  returns NDJSON
 nominatim mcp                   # speak MCP over stdio
 ```
 
@@ -63,22 +74,20 @@ import _ "github.com/tamnd/nominatim-cli/nominatim"
 ```
 
 Then [ant](https://github.com/tamnd/ant) (or any program that links the package)
-dereferences `nominatim://` URIs without knowing anything about nominatim:
+dereferences `nominatim://` URIs without knowing anything about Nominatim:
 
 ```bash
-ant get nominatim://page/<path>   # fetch the record
-ant cat nominatim://page/<path>   # just the body text
-ant ls  nominatim://page/<path>   # the pages it links to, each addressable
-ant url nominatim://page/<path>   # the live https URL
+ant get nominatim://place/Paris
+ant url nominatim://place/Paris
 ```
 
 ## Development
 
 ```
 cmd/nominatim/   thin main: hands cli.NewApp to kit.Run
-cli/                 assembles the kit App from the nominatim domain
-nominatim/                the library: HTTP client, data models, and domain.go (the driver)
-docs/                tago documentation site
+cli/             assembles the kit App from the nominatim domain
+nominatim/       the library: HTTP client, data models, and domain.go (the driver)
+docs/            documentation site
 ```
 
 ```bash
@@ -89,17 +98,12 @@ make vet        # go vet ./...
 
 ## Releasing
 
-Push a version tag and GitHub Actions runs GoReleaser, which builds the
-archives, Linux packages, the multi-arch GHCR image, checksums, SBOMs, and a
-cosign signature:
+Push a version tag and GitHub Actions runs GoReleaser:
 
 ```bash
 git tag v0.1.0
 git push --tags
 ```
-
-The Homebrew and Scoop steps self-disable until their tokens exist, so the first
-release works with no extra secrets.
 
 ## License
 
