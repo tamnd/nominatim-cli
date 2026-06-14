@@ -148,7 +148,6 @@ func reverseOp(ctx context.Context, in reverseInput, emit func(Address) error) e
 	return emit(*addr)
 }
 
-
 func lookupOp(ctx context.Context, in lookupInput, emit func(Location) error) error {
 	items, err := in.Client.Lookup(ctx, in.IDs)
 	if err != nil {
