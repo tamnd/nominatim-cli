@@ -61,6 +61,14 @@ func (Domain) Register(app *kit.App) {
 		Single:  true,
 		Summary: "Reverse geocoding: convert coordinates to an address",
 	}, reverseOp)
+
+	// lookup: fetch OSM objects by prefixed ID (N=node, R=relation, W=way)
+	kit.Handle(app, kit.OpMeta{
+		Name:    "lookup",
+		Group:   "read",
+		List:    true,
+		Summary: "Look up OSM objects by ID (e.g. R7444 N1234)",
+	}, lookupOp)
 }
 
 // newClient builds the client from the host-resolved config.
@@ -95,6 +103,11 @@ type reverseInput struct {
 	Client *Client `kit:"inject"`
 }
 
+type lookupInput struct {
+	IDs    []string `kit:"args" help:"OSM IDs with type prefix (e.g. R7444 N1234)"`
+	Client *Client  `kit:"inject"`
+}
+
 // --- handlers ---
 
 func searchOp(ctx context.Context, in searchInput, emit func(Location) error) error {
@@ -120,6 +133,19 @@ func reverseOp(ctx context.Context, in reverseInput, emit func(Address) error) e
 		return mapErr(err)
 	}
 	return emit(*addr)
+}
+
+func lookupOp(ctx context.Context, in lookupInput, emit func(Location) error) error {
+	items, err := in.Client.Lookup(ctx, in.IDs)
+	if err != nil {
+		return mapErr(err)
+	}
+	for _, item := range items {
+		if err := emit(item); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // --- Resolver: pure string functions, no network ---

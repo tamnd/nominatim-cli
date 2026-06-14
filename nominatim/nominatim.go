@@ -93,6 +93,35 @@ func (c *Client) Search(ctx context.Context, query string, limit int) ([]Locatio
 	return items, nil
 }
 
+// Lookup looks up one or more OSM objects by their prefixed IDs.
+// IDs must carry the type prefix: N=node, R=relation, W=way (e.g. "R7444").
+// The Nominatim parameter is named osmnodes regardless of the ID type.
+func (c *Client) Lookup(ctx context.Context, osmIDs []string) ([]Location, error) {
+	if len(osmIDs) == 0 {
+		return nil, fmt.Errorf("lookup: no OSM IDs provided")
+	}
+	joined := strings.Join(osmIDs, ",")
+	u := fmt.Sprintf("%s/lookup?osmnodes=%s&format=json&addressdetails=0",
+		c.cfg.BaseURL, neturl.QueryEscape(joined))
+	body, err := c.get(ctx, u)
+	if err != nil {
+		return nil, err
+	}
+	var raw []rawLocation
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return nil, fmt.Errorf("decode lookup response: %w", err)
+	}
+	items := make([]Location, 0, len(raw))
+	for i, r := range raw {
+		loc, err := r.toLocation(i + 1)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, loc)
+	}
+	return items, nil
+}
+
 // Reverse performs reverse geocoding: converts a latitude/longitude pair into a
 // structured address.
 func (c *Client) Reverse(ctx context.Context, lat, lon float64) (*Address, error) {

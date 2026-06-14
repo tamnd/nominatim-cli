@@ -169,6 +169,98 @@ func TestSearchRetriesOn503(t *testing.T) {
 	}
 }
 
+const fakeLookupJSON = `[
+  {
+    "place_id": 162639773,
+    "osm_type": "relation",
+    "osm_id": 7444,
+    "display_name": "Paris, Île-de-France, France métropolitaine, France",
+    "lat": "48.8534951",
+    "lon": "2.3483915",
+    "class": "boundary",
+    "type": "administrative",
+    "importance": 0.9306897
+  }
+]`
+
+func TestLookupSendsUserAgent(t *testing.T) {
+	var gotUA string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotUA = r.Header.Get("User-Agent")
+		_, _ = fmt.Fprint(w, fakeLookupJSON)
+	}))
+	defer ts.Close()
+
+	c := newTestClient(ts)
+	_, err := c.Lookup(context.Background(), []string{"R7444"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotUA == "" {
+		t.Error("User-Agent not sent on lookup")
+	}
+}
+
+func TestLookupParsesItems(t *testing.T) {
+	var gotQuery string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.RawQuery
+		_, _ = fmt.Fprint(w, fakeLookupJSON)
+	}))
+	defer ts.Close()
+
+	c := newTestClient(ts)
+	items, err := c.Lookup(context.Background(), []string{"R7444"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("len(items) = %d, want 1", len(items))
+	}
+	got := items[0]
+	if got.Rank != 1 {
+		t.Errorf("Rank = %d, want 1", got.Rank)
+	}
+	if got.DisplayName != "Paris, Île-de-France, France métropolitaine, France" {
+		t.Errorf("DisplayName = %q", got.DisplayName)
+	}
+	if got.OsmType != "relation" {
+		t.Errorf("OsmType = %q, want relation", got.OsmType)
+	}
+	if got.OsmID != 7444 {
+		t.Errorf("OsmID = %d, want 7444", got.OsmID)
+	}
+	wantURL := "https://www.openstreetmap.org/relation/7444"
+	if got.URL != wantURL {
+		t.Errorf("URL = %q, want %q", got.URL, wantURL)
+	}
+	// Check that osmnodes parameter was sent
+	if !contains(gotQuery, "osmnodes") {
+		t.Errorf("query %q does not contain osmnodes", gotQuery)
+	}
+}
+
+func TestLookupEmptyIDs(t *testing.T) {
+	c := nominatim.NewClient(nominatim.DefaultConfig())
+	_, err := c.Lookup(context.Background(), nil)
+	if err == nil {
+		t.Error("expected error for empty ID list")
+	}
+}
+
+func contains(s, sub string) bool {
+	return len(s) >= len(sub) && (s == sub || len(s) > 0 && containsStr(s, sub))
+}
+
+func containsStr(s, sub string) bool {
+	for i := 0; i <= len(s)-len(sub); i++ {
+		if s[i:i+len(sub)] == sub {
+			return true
+		}
+	}
+	return false
+}
+
 func TestReverseParses(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = fmt.Fprint(w, fakeReverseJSON)
