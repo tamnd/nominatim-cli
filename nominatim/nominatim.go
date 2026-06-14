@@ -64,13 +64,17 @@ func NewClient(cfg Config) *Client {
 // Search performs forward geocoding: converts a free-form query string into a
 // list of matching locations. If limit <= 0 the caller's default is applied;
 // pass a positive value to cap results (max 50 per the API).
-func (c *Client) Search(ctx context.Context, query string, limit int) ([]Location, error) {
+// If country is non-empty it must be an ISO 3166-1 alpha-2 code (e.g. "fr").
+func (c *Client) Search(ctx context.Context, query string, limit int, country string) ([]Location, error) {
 	n := limit
 	if n <= 0 {
 		n = 5
 	}
 	u := fmt.Sprintf("%s/search?q=%s&format=json&limit=%d&addressdetails=0",
 		c.cfg.BaseURL, neturl.QueryEscape(query), n)
+	if country != "" {
+		u += "&countrycodes=" + neturl.QueryEscape(country)
+	}
 	body, err := c.get(ctx, u)
 	if err != nil {
 		return nil, err
@@ -136,6 +140,20 @@ func (c *Client) Reverse(ctx context.Context, lat, lon float64) (*Address, error
 		return nil, fmt.Errorf("decode reverse response: %w", err)
 	}
 	return raw.toAddress()
+}
+
+// Status checks the Nominatim API health and returns data freshness info.
+func (c *Client) Status(ctx context.Context) (*Status, error) {
+	u := c.cfg.BaseURL + "/status?format=json"
+	body, err := c.get(ctx, u)
+	if err != nil {
+		return nil, err
+	}
+	var s Status
+	if err := json.Unmarshal(body, &s); err != nil {
+		return nil, fmt.Errorf("decode status response: %w", err)
+	}
+	return &s, nil
 }
 
 func (c *Client) get(ctx context.Context, url string) ([]byte, error) {

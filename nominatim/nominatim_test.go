@@ -73,7 +73,7 @@ func TestSearchSendsUserAgent(t *testing.T) {
 	defer ts.Close()
 
 	c := newTestClient(ts)
-	_, err := c.Search(context.Background(), "Paris", 1)
+	_, err := c.Search(context.Background(), "Paris", 1, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +89,7 @@ func TestSearchParsesItems(t *testing.T) {
 	defer ts.Close()
 
 	c := newTestClient(ts)
-	items, err := c.Search(context.Background(), "Paris", 0)
+	items, err := c.Search(context.Background(), "Paris", 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +133,7 @@ func TestSearchLimitRespected(t *testing.T) {
 	defer ts.Close()
 
 	c := newTestClient(ts)
-	items, err := c.Search(context.Background(), "Paris", 1)
+	items, err := c.Search(context.Background(), "Paris", 1, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -160,7 +160,7 @@ func TestSearchRetriesOn503(t *testing.T) {
 	cfg.Retries = 3
 	c := nominatim.NewClient(cfg)
 
-	_, err := c.Search(context.Background(), "Paris", 0)
+	_, err := c.Search(context.Background(), "Paris", 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -295,5 +295,58 @@ func TestReverseParses(t *testing.T) {
 	}
 	if !approxEqual(addr.Lon, 2.3514992, 0.001) {
 		t.Errorf("Lon = %f, want ~2.3514992", addr.Lon)
+	}
+}
+
+func TestSearchCountryParam(t *testing.T) {
+	var gotQuery string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.RawQuery
+		_, _ = fmt.Fprint(w, fakeSearchJSON)
+	}))
+	defer ts.Close()
+
+	c := newTestClient(ts)
+	_, err := c.Search(context.Background(), "Lyon", 5, "fr")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !containsStr(gotQuery, "countrycodes=fr") {
+		t.Errorf("query %q does not contain countrycodes=fr", gotQuery)
+	}
+}
+
+const fakeStatusJSON = `{
+  "status": 0,
+  "message": "OK",
+  "data_updated": "2024-01-15T01:00:01+00:00",
+  "software_version": "4.4.0-0",
+  "database_version": "4.4.0-0"
+}`
+
+const fakeStatusErrorJSON = `{
+  "status": 2,
+  "message": "Database connection failed"
+}`
+
+func TestStatusParsesOK(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprint(w, fakeStatusJSON)
+	}))
+	defer ts.Close()
+
+	c := newTestClient(ts)
+	s, err := c.Status(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Status != 0 {
+		t.Errorf("Status = %d, want 0", s.Status)
+	}
+	if s.Message != "OK" {
+		t.Errorf("Message = %q, want OK", s.Message)
+	}
+	if s.DataUpdated == "" {
+		t.Error("DataUpdated is empty")
 	}
 }

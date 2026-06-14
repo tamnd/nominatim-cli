@@ -34,6 +34,15 @@ type Address struct {
 	Postcode    string  `json:"postcode,omitempty"`
 }
 
+// Status is the result from the Nominatim /status endpoint.
+type Status struct {
+	Status          int    `json:"status"`
+	Message         string `json:"message"`
+	DataUpdated     string `json:"data_updated"`
+	SoftwareVersion string `json:"software_version"`
+	DatabaseVersion string `json:"database_version"`
+}
+
 // unexported: only used for JSON decode from the Nominatim API
 
 // rawLocation is the JSON shape from /search. lat and lon are strings in the

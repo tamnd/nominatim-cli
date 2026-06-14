@@ -69,6 +69,14 @@ func (Domain) Register(app *kit.App) {
 		List:    true,
 		Summary: "Look up OSM objects by ID (e.g. R7444 N1234)",
 	}, lookupOp)
+
+	// status: check API health and data freshness
+	kit.Handle(app, kit.OpMeta{
+		Name:    "status",
+		Group:   "read",
+		Single:  true,
+		Summary: "Check API health and data freshness",
+	}, statusOp)
 }
 
 // newClient builds the client from the host-resolved config.
@@ -92,9 +100,10 @@ func newClient(_ context.Context, cfg kit.Config) (any, error) {
 // --- inputs ---
 
 type searchInput struct {
-	Query  string  `kit:"arg"         help:"place name or address to geocode"`
-	Limit  int     `kit:"flag,inherit" help:"max results (default 5)"`
-	Client *Client `kit:"inject"`
+	Query   string  `kit:"arg"          help:"place name or address to geocode"`
+	Limit   int     `kit:"flag,inherit" help:"max results (default 5)"`
+	Country string  `kit:"flag,inherit" help:"ISO 3166-1 alpha-2 country code to restrict results"`
+	Client  *Client `kit:"inject"`
 }
 
 type reverseInput struct {
@@ -115,7 +124,7 @@ func searchOp(ctx context.Context, in searchInput, emit func(Location) error) er
 	if limit <= 0 {
 		limit = 5
 	}
-	items, err := in.Client.Search(ctx, in.Query, limit)
+	items, err := in.Client.Search(ctx, in.Query, limit, in.Country)
 	if err != nil {
 		return mapErr(err)
 	}
@@ -146,6 +155,18 @@ func lookupOp(ctx context.Context, in lookupInput, emit func(Location) error) er
 		}
 	}
 	return nil
+}
+
+type statusInput struct {
+	Client *Client `kit:"inject"`
+}
+
+func statusOp(ctx context.Context, in statusInput, emit func(Status) error) error {
+	s, err := in.Client.Status(ctx)
+	if err != nil {
+		return mapErr(err)
+	}
+	return emit(*s)
 }
 
 // --- Resolver: pure string functions, no network ---
